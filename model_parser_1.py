@@ -3,6 +3,7 @@ from spacy.tokens import DocBin
 from spacy.training import Example
 import re
 import random
+import pandas as pd
 
 ######################################################
 ##########Créer un chatroom fake avec des variables aléatoires basées 
@@ -20,7 +21,16 @@ currencies = [
     "USD/DKK", "USD/NOK", "USD/SEK", "EUR/NOK", "EUR/SEK",
     "EUR/DKK", "USD/THB", "USD/TWD", "USD/CZK", "USD/HUF",
     "USD/ILS", "USD/SAR", "USD/AED", "USD/CLP", "USD/PHP",
-    "YEN", "EUR", "GBP", "USD","¥"]
+    "EURUSD", "USDJPY", "GBPUSD", "AUDUSD", "USDCAD",
+    "USDCHF", "NZDUSD", "EURJPY", "EURGBP", "EURCHF",
+    "GBPJPY", "AUDJPY", "AUDNZD", "USDCNH", "EURAUD",
+    "EURCAD", "CADJPY", "CHFJPY", "GBPCAD", "GBPAUD",
+    "NZDJPY", "GBPNZD", "EURNZD", "AUDCAD", "USDSGD",
+    "USDHKD", "EURSGD", "USDKRW", "USDINR", "USDTRY",
+    "USDBRL", "USDMXN", "USDZAR", "USDPLN", "USDRUB",
+    "USDDKK", "USDNOK", "USDSEK", "EURNOK", "EURSEK",
+    "EURDKK", "USDTHB", "USDTWD", "USDCZK", "USDHUF",
+    "USDILS", "USDSAR", "USDAED", "USDCLP", "USDPHP"]
 
 
 risk_types = ["RR10", "RR25", "RR", "FLY", "BFLY","buterfly"]
@@ -31,7 +41,7 @@ maturities = ["1W", "2W", "1M", "3M", "6M", "1Y","2Y","3Y","4Y",
 
 # Générer la liste de données
 data = []
-for _ in range(1000):
+for _ in range(50):
     currency = random.choice(currencies)
     risk_type = random.choice(risk_types)
     delta = random.choice(deltas)
@@ -58,7 +68,7 @@ for _ in range(1000):
 
 # Affichage d'un extrait des données
 all_chat=pd.DataFrame(data)
-all_chat.head()
+print(all_chat.head())
 
 ########################################################
 
@@ -68,37 +78,65 @@ nlp = spacy.blank("en")  # Utilise "fr" pour le français
 # Définir un pipeline NER
 ner = nlp.add_pipe("ner")
 
+# Charger le modèle de base de spaCy pour le français
+nlp = spacy.blank("en")  # ou "fr" si tu veux le français
+
+# Définir un pipeline NER
+ner = nlp.add_pipe("ner")
+
+# Liste des chaînes d'entrée
 lines=all_chat['text']
+
 # Regex pour capturer chaque composant dans le format attendu
 pattern = re.compile(
-    r"(?P<Currency>[A-Z]{3,6}|¥)\s+"\
-    r"(?P<RiskType>(?:[A-Za-z]*fly*[A-Za-z]|RR|ATM))\s*"\
-    r"(?P<Delta>(?!ATM)([Dd]?\d{1,2}))?\s*"\
-    r"(?P<Maturity>\d{1,2}[YMWKS]{1,3})\s+"\
-    r"(?P<Bid>\d+\.\d+)\s*/\s*(?P<Ask>\d+\.\d+)"
+    r"(?P<Currency>[A-Z]{3,6})\s+"  # Capture la devise (3 à 6 lettres, ex : EUR, EURUSD)
+    r"(?P<RiskType>[a-zA-Z]+[0-9]*)\s+"  # Capture le type de risque, ex : RR10, RR, ATM, FLY
+    r"(?P<Maturity>\d+[YMWS]{1,2})\s+"  # Capture la maturité (ex: 1Y, 6M, 3W, 2WS)
+    r"(?P<Bid>[0-9.]+)\s*/\s*(?P<Ask>[0-9.]+)"  # Capture Bid/Ask avec gestion des espaces autour de "/"
 )
 
-# Fonction pour extraire les entités du texte
+# Regex ajustée pour capturer toutes les variantes de "fly" (commençant ou finissant par fly)
+pattern=re.compile(
+          r'\s*(?P<Currency>[A-Z]{3,6}|¥|[A-Z]{3}/[A-Z]{3})\s+' \
+          r'(?P<RiskType>(?:[A-Za-z]*fly*[A-Za-z]|RR|ATM))\s*' \
+          r'(?P<Delta>(?!ATM)([Dd]?\d{1,2}))?\s*' \
+          r'(?P<Maturity>\d{1,2}[YMWKS]{1,3})\s+' \
+          r'\s*(?P<Bid>\d+\.\d+)\s*/\s*(?P<Ask>\d+\.\d+)\s*')
+
+# Fonction pour identifier la position des resultats dans le texte à partir des regex, servira a entrainer le modele
 def extract_entities(line):
     match = pattern.search(line)
     if match:
         entities = []
-        for group_name in ["Currency", "RiskType", "Delta", "Maturity", "Bid", "Ask"]:
+        # Obtenir les groupes capturés et leurs positions dans le texte
+        for group_name in ["Currency", "RiskType","Delta", "Maturity", "Bid", "Ask"]:
             start, end = match.span(group_name)
-            entities.append((start, end, group_name.upper()))
-        return line, {"entities": entities}
+            entities.append((start, end, group_name.upper()))  # Convertir le nom de l'entité en majuscule
+
+        #return { "text": line, "entities": entities }
+        return line, {"entities": entities }
     return None
 
-# Ajouter des labels dans le NER
-labels = ["Currency", "RiskType", "Delta", "Maturity", "Bid", "Ask"]
+
+# Définir les labels des entités que nous souhaitons reconnaître
+labels = ["Currency", "RiskType","Delta", "Maturity", "Bid", "Ask"]
 for label in labels:
     ner.add_label(label)
+#[ner.add_label(label) for label in labels]
 
-# Préparer les données d'entraînement
+# Appliquer la fonction sur chaque ligne et afficher les résultats
+# Créer quelques exemples annotés pour l'entraînement
 results = [extract_entities(line) for line in lines]
-train_data = [item for item in results if item is not None]
+train_data=[item for item in results if item is not None]
+print(train_data)
+# train_data = [
+#     ("EURUSD RR10 1Y 8.1/9.1", {"entities": [(0, 6, "CURRENCY"), (7, 12, "RISKTYPE"), (13, 15, "MATURITY"), (16, 19, "BID"), (20, 23, "ASK")]}),
+#     ("GBPUSD RR25 6M 7.5/8.5", {"entities": [(0, 6, "CURRENCY"), (7, 12, "RISKTYPE"), (13, 15, "MATURITY"), (16, 19, "BID"), (20, 23, "ASK")]}),
+#     ("USDJPY RR5 3Y 6.3/7.0", {"entities": [(0, 6, "CURRENCY"), (7, 10, "RISKTYPE"), (11, 13, "MATURITY"), (14, 17, "BID"), (18, 21, "ASK")]}),
+# ]
 
-# Convertir les exemples en format spaCy
+
+# Convertir les exemples au format spaCy
 db = DocBin()
 for text, annotations in train_data:
     doc = nlp.make_doc(text)
@@ -109,60 +147,23 @@ for text, annotations in train_data:
 
 # Entraîner le modèle
 optimizer = nlp.initialize()
-for i in range(100):
+for i in range(100):  # Boucle d'entraînement avec 100 itérations
     for text, annotations in train_data:
         example = Example.from_dict(nlp.make_doc(text), annotations)
-        nlp.update([example], drop=0.3, sgd=optimizer)
+        #nlp.update([example], drop=0.3, sgd=optimizer)
+        nlp.update([example], drop=0.3,sgd=optimizer)
 
-####################################################################
-##############Test du model #######################################
-################################################################
+# Tester le modèle sur une nouvelle phrase et obtenir les scores de probabilité
+test_text = "EURUSD bf d10 2Wk 8.1/9.1"
+doc = nlp(test_text)
 
+# Afficher les entités détectées avec leurs scores de probabilité
+for ent in doc.ents:
+    print(f"Texte: {ent.text}, Label: {ent.label_}, Position: ({ent.start_char}, {ent.end_char}), "
+          f"Score de probabilité: {ent.score if hasattr(ent, 'score') else 'N/A'}")
 
-
-# ... (your existing code)
-
-# ... (rest of your existing code)
-
-# The code trains a spaCy NER (Named Entity Recognition) model to identify specific components (Currency, RiskType, Delta, Maturity, Bid, Ask) within financial strings.
-
-# Here's a breakdown of the key parts and potential improvements:
-
-# 1. Data Preparation:
-#   - The input data consists of strings representing financial instruments with their corresponding annotations.
-#   - The regular expression `pattern` is crucial. It defines the structure you expect in the input strings.  The original pattern was improved to capture more variants of "fly" and allow for optional delta values.  This regex is essential to correctly extracting entities and providing training data.
-#   - The `extract_entities` function uses this regular expression to find the components in the input strings and extract their starting and ending positions. This information is then used to create the training data for spaCy.
-#   - The crucial improvement is the regex; a revised regex now accounts for optional Delta values and more "fly"-related variants.
-
-# 2. Model Initialization:
-#   - `spacy.blank("en")` creates a blank spaCy model. You might consider using a pre-trained model ("en_core_web_sm" or similar) as a base, as it could improve initial performance.  This would require changing how you add labels (see below).
-#   - `ner = nlp.add_pipe("ner")` adds a named entity recognition component to the pipeline.  Using a pre-trained model will require a different approach to add labels.
-#   - `ner.add_label(...)`: crucial to define the categories or entity types for the model to learn (labels).  If you use a pre-trained model, you will only add labels which aren't present in the pre-trained model.
-
-# 3. Training:
-#   - `db = DocBin()`: Creates a DocBin to store training examples in a format spaCy can use.
-#   - The code iterates through the training data, creates spaCy `Doc` objects, annotates them with the identified entities (using `doc.ents`), and adds them to the DocBin.
-#   - `nlp.initialize()`: initializes the model's optimizer for training.
-#   - The training loop iterates over the examples and updates the model using `nlp.update()`.   The key parameters here are `drop` (dropout rate for regularization) and `sgd` (the optimizer).  You may need to adjust the number of iterations (100) and learning rate for optimal performance.
-
-# 4. Testing and Evaluation:
-#   - The code demonstrates how to process a new text (`test_text`) using the trained model and print the recognized entities.
-#   - **Missing Evaluation:** A crucial aspect missing is a proper evaluation. You should split your data into training and testing sets (which you have done using train_test_split earlier) and use metrics like precision, recall, and F1-score to evaluate the model's performance.  You are using classification report in the first part, it is not a bad idea to add it here as well.
-#   - **Overfitting:** Because the training set is small, the model could easily overfit.  If you use all your data for training and do not split your data between test and train sets, then you should expect this.  Increase the size of your data and then try it again.
-
-# Key Improvements and Considerations:
-
-# - Use a pre-trained model: Start with a pre-trained spaCy model for better performance and avoid overfitting.
-# - Increase training data: The model needs significantly more annotated data to generalize well to new examples.   It would be better if you train on thousand of sentences rather than a small amount.
-# - Hyperparameter Tuning: Experiment with different hyperparameters (learning rate, number of iterations, dropout rate) to optimize performance.
-# - Proper evaluation: Use a held-out test set and appropriate metrics (precision, recall, F1-score) to properly assess model performance.
-# - More sophisticated regular expressions: Make sure your regex is powerful enough to handle edge cases and different variations in input.
-
-# Example of how to use a pre-trained model (and a different label addition method):
-
-# import spacy
-# nlp = spacy.load("en_core_web_sm") # Load a pretrained model
-# ner = nlp.get_pipe("ner")
-# for label in labels:
-#     if label not in ner.labels:
-#         ner.add_label(label)
+# Affichage d'un résumé pour chaque entité détectée
+print("\nRésumé des prédictions:")
+for ent in doc.ents:
+    label_verification = ent.label_ in labels
+    print(f"- Entité: {ent.text} | Label: {ent.label_} | Vérification: {'Valide' if label_verification else 'Invalide'}")
