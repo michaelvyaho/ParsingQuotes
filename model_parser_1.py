@@ -117,3 +117,52 @@ for i in range(100):
 ####################################################################
 ##############Test du model #######################################
 ################################################################
+
+
+
+# ... (your existing code)
+
+# ... (rest of your existing code)
+
+# The code trains a spaCy NER (Named Entity Recognition) model to identify specific components (Currency, RiskType, Delta, Maturity, Bid, Ask) within financial strings.
+
+# Here's a breakdown of the key parts and potential improvements:
+
+# 1. Data Preparation:
+#   - The input data consists of strings representing financial instruments with their corresponding annotations.
+#   - The regular expression `pattern` is crucial. It defines the structure you expect in the input strings.  The original pattern was improved to capture more variants of "fly" and allow for optional delta values.  This regex is essential to correctly extracting entities and providing training data.
+#   - The `extract_entities` function uses this regular expression to find the components in the input strings and extract their starting and ending positions. This information is then used to create the training data for spaCy.
+#   - The crucial improvement is the regex; a revised regex now accounts for optional Delta values and more "fly"-related variants.
+
+# 2. Model Initialization:
+#   - `spacy.blank("en")` creates a blank spaCy model. You might consider using a pre-trained model ("en_core_web_sm" or similar) as a base, as it could improve initial performance.  This would require changing how you add labels (see below).
+#   - `ner = nlp.add_pipe("ner")` adds a named entity recognition component to the pipeline.  Using a pre-trained model will require a different approach to add labels.
+#   - `ner.add_label(...)`: crucial to define the categories or entity types for the model to learn (labels).  If you use a pre-trained model, you will only add labels which aren't present in the pre-trained model.
+
+# 3. Training:
+#   - `db = DocBin()`: Creates a DocBin to store training examples in a format spaCy can use.
+#   - The code iterates through the training data, creates spaCy `Doc` objects, annotates them with the identified entities (using `doc.ents`), and adds them to the DocBin.
+#   - `nlp.initialize()`: initializes the model's optimizer for training.
+#   - The training loop iterates over the examples and updates the model using `nlp.update()`.   The key parameters here are `drop` (dropout rate for regularization) and `sgd` (the optimizer).  You may need to adjust the number of iterations (100) and learning rate for optimal performance.
+
+# 4. Testing and Evaluation:
+#   - The code demonstrates how to process a new text (`test_text`) using the trained model and print the recognized entities.
+#   - **Missing Evaluation:** A crucial aspect missing is a proper evaluation. You should split your data into training and testing sets (which you have done using train_test_split earlier) and use metrics like precision, recall, and F1-score to evaluate the model's performance.  You are using classification report in the first part, it is not a bad idea to add it here as well.
+#   - **Overfitting:** Because the training set is small, the model could easily overfit.  If you use all your data for training and do not split your data between test and train sets, then you should expect this.  Increase the size of your data and then try it again.
+
+# Key Improvements and Considerations:
+
+# - Use a pre-trained model: Start with a pre-trained spaCy model for better performance and avoid overfitting.
+# - Increase training data: The model needs significantly more annotated data to generalize well to new examples.   It would be better if you train on thousand of sentences rather than a small amount.
+# - Hyperparameter Tuning: Experiment with different hyperparameters (learning rate, number of iterations, dropout rate) to optimize performance.
+# - Proper evaluation: Use a held-out test set and appropriate metrics (precision, recall, F1-score) to properly assess model performance.
+# - More sophisticated regular expressions: Make sure your regex is powerful enough to handle edge cases and different variations in input.
+
+# Example of how to use a pre-trained model (and a different label addition method):
+
+# import spacy
+# nlp = spacy.load("en_core_web_sm") # Load a pretrained model
+# ner = nlp.get_pipe("ner")
+# for label in labels:
+#     if label not in ner.labels:
+#         ner.add_label(label)
