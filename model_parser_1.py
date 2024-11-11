@@ -167,3 +167,40 @@ print("\nRésumé des prédictions:")
 for ent in doc.ents:
     label_verification = ent.label_ in labels
     print(f"- Entité: {ent.text} | Label: {ent.label_} | Vérification: {'Valide' if label_verification else 'Invalide'}")
+
+
+# Tester le modèle sur une nouvelle phrase et obtenir les scores de probabilité
+test_text = "EURUSD bf d10 2Wk 8.1/9.1"
+doc = nlp(test_text)
+
+# Afficher les entités détectées avec leurs scores de probabilité
+for ent in doc.ents:
+    print(f"Texte: {ent.text}, Label: {ent.label_}, Position: ({ent.start_char}, {ent.end_char}), "
+          f"Score de probabilité: {ent.score if hasattr(ent, 'score') else 'N/A'}")
+
+# Affichage d'un résumé pour chaque entité détectée
+print("\nRésumé des prédictions:")
+for ent in doc.ents:
+    label_verification = ent.label_ in labels
+    print(f"- Entité: {ent.text} | Label: {ent.label_} | Vérification: {'Valide' if label_verification else 'Invalide'}")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
